@@ -1,0 +1,58 @@
+---
+title: "Power Simulation for Moment-Based Tests"
+format: html
+---
+
+# Overview
+
+This vignette demonstrates how to run a power simulation for moment-based hypothesis tests using the modular functions provided. The workflow follows the tidyverse style and is fully pipe-compatible.
+
+# Setup
+
+```r
+library(tidyverse)
+library(MASS)
+source("../R/moments_and_statistics.R")
+source("../R/regularization_selection.R")
+source("../R/power_simulation.R")
+```
+
+# Running a Power Simulation
+
+Set up parameters and run the simulation:
+
+```r
+params <- list(
+  n = 100,
+  n_sim = 8,
+  n_boot = 100,
+  alpha = 0.05,
+  moment_order = 3,
+  n_rep = 100,
+  mu_grid = seq(0, 2.1, by = 0.3),
+  c_grid = c(50, 20, 10, 0.1, 0.001, 0.000001, 0.000000001, 0)
+)
+
+power_results <- run_power_simulation(
+  n = params$n,
+  n_sim = params$n_sim,
+  n_boot = params$n_boot,
+  alpha = params$alpha,
+  moment_order = params$moment_order,
+  n_rep = params$n_rep,
+  mu_grid = params$mu_grid,
+  c_grid = params$c_grid
+)
+power_results
+```
+
+# Plotting Power Curves
+
+```r
+source("../R/plot_power_curves.R")
+plot_power_curves(power_results, params$alpha)
+```
+
+# Summary
+
+This workflow enables robust power analysis for moment-based tests, supporting both unweighted and optimally weighted statistics. Adjust parameters as needed for your application.

@@ -1,0 +1,63 @@
+---
+title: "Working with Sample Moments and Test Statistics"
+format: html
+---
+
+# Overview
+
+This vignette demonstrates how to use the core functions for calculating sample moments and test statistics, as defined in `moments_and_statistics.R`. All code follows the tidyverse style guide and is pipe-friendly.
+
+# Setup
+
+```r
+library(purrr)
+# Source the script if not using a package structure
+source("../R/moments_and_statistics.R")
+```
+
+# Calculating Sample Moments
+
+The `calculate_moments()` function computes the mean of a numeric vector raised to each integer power up to a specified order.
+
+```r
+x <- c(1, 2, 3, 4, 5)
+moments <- calculate_moments(x, max_order = 3)
+moments
+#> [1] 3.0 11.0 49.0
+```
+
+# Computing Test Statistics
+
+## Unweighted Statistic
+
+The `compute_statistic_unweighted()` function calculates the squared Euclidean distance between two vectors.
+
+```r
+observed <- c(1, 2, 3)
+reference <- c(2, 2, 2)
+compute_statistic_unweighted(observed, reference)
+#> 2
+```
+
+## Weighted Statistic
+
+The `compute_statistic_weighted()` function computes a quadratic form using a weighting matrix (e.g., a covariance matrix).
+
+```r
+weight_mat <- diag(3)
+compute_statistic_weighted(observed, reference, weight_mat)
+#> 2
+```
+
+# Covariance of Simulated Moments
+
+The `covariance_of_moments()` function computes the sample covariance matrix of simulated moment vectors.
+
+```r
+sim_moments <- matrix(rnorm(30), nrow = 10, ncol = 3)
+covariance_of_moments(sim_moments)
+```
+
+# Summary
+
+These functions provide a foundation for moment-based hypothesis testing and simulation workflows. For more advanced usage, see additional vignettes on regularization and power analysis.
