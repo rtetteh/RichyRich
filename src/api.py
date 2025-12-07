@@ -6,6 +6,8 @@ from typing import List, Optional
 import numpy as np
 import os
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from .distribution import HybridLogNormalPareto, HybridParams
 from .estimation import ParameterEstimator
@@ -118,6 +120,23 @@ def run_empirical_size_experiment(config: ExperimentConfig) -> EmpiricalSizeResu
     true_data = HybridLogNormalPareto.generate_sample(
         config.n_data, true_params, seed=config.seed
     )
+
+    # Plot the distribution of the true data
+    plt.figure(figsize=(10, 6))
+    sns.histplot(true_data, kde=True, color='blue', alpha=0.7)
+    plt.axvline(x=config.tau_true, color='red', linestyle='--', linewidth=2, label=f'82nd Percentile: {config.tau_true}')
+    plt.title('Distribution of True Data with 82nd Percentile')
+    plt.xlabel('Value')
+    plt.ylabel('Frequency')
+    plt.legend()
+    plt.show()
+
+    # Print percentiles from 70 to 90 with step 1
+    percentiles = np.arange(70, 91, 1)
+    percentile_values = np.percentile(true_data, percentiles)
+    print("Percentiles from 70 to 90:")
+    for p, v in zip(percentiles, percentile_values):
+        print(f"{p}th percentile: {v:.2f}")
 
     tau_grid = (
         config.tau_grid
