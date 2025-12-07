@@ -1,59 +1,75 @@
-# RichyRich: Moment-Based Hypothesis Testing and Simulation
+# Empirical Size Analysis of Hybrid LogNormal-Pareto Distributions
 
-## Overview
+This project implements a modular, high-performance Python system for performing empirical size analysis of statistical tests on Hybrid LogNormal-Pareto distributions. It is designed to validate statistical methods used for analyzing heavy-tailed data (e.g., wealth or income distributions).
 
-This project provides modular R scripts for conducting moment-based hypothesis tests, optimal weighting via regularization, and power simulations. All code follows the tidyverse style guide, uses snake_case naming, and is pipe-friendly. The workflow is suitable for advanced statistical simulation and robust hypothesis testing.
+## Project Structure
 
-## Core Functionalities
+The project is organized into a modular `src` package and execution scripts:
 
-### 1. Sample Moments and Test Statistics (`R/moments_and_statistics.R`)
-- **calculate_moments(x, max_order):**
-  Computes the mean of a numeric vector raised to each integer power up to `max_order`.
-- **compute_statistic_unweighted(observed, reference):**
-  Calculates the squared Euclidean distance between two vectors (unweighted test statistic).
-- **compute_statistic_weighted(observed, reference, weight_mat):**
-  Computes a quadratic form using a weighting matrix (e.g., covariance matrix) for Mahalanobis-style statistics.
-- **covariance_of_moments(sim_moments):**
-  Computes the sample covariance matrix of simulated moment vectors.
+```text
+RichyRich/
+├── src/                        # Core source code
+│   ├── distribution.py         # Data generation (Hybrid LogNormal-Pareto)
+│   ├── estimation.py           # Parameter estimation (MLE, Hill, MoM)
+│   ├── statistics.py           # Auxiliary statistics (Percentiles, Gini, Theil)
+│   ├── testing.py              # Hypothesis testing & Beta selection logic
+│   ├── simulation.py           # Parallel simulation runner
+│   └── utils.py                # Utility functions (Matrix operations)
+├── main.py                     # Command-line script to run the full simulation
+├── demo_analysis.ipynb         # Jupyter notebook demonstrating system usage
+├── requirements.txt            # Python dependencies
+└── README.md                   # This file
+```
 
-### 2. Regularization Selection (`R/regularization_selection.R`)
-- **select_optimal_regularization(n, c_grid, moment_order, n_sim, n_boot, x):**
-  Cross-validates over candidate regularization values to minimize the difference in p-values between train/test splits, returning the optimal regularization parameter for weighting matrices.
+## Installation
 
-### 3. Power Simulation (`R/power_simulation.R`)
-- **run_power_simulation(n, n_sim, n_boot, alpha, moment_order, n_rep, mu_grid, c_grid):**
-  Simulates the empirical power of both unweighted and optimally weighted moment-based tests across a grid of means. Returns a tibble with power results for each test.
+1. **Prerequisites**: Ensure you have Python 3.8+ installed.
 
-### 4. Visualization (`R/plot_power_curves.R`)
-- **plot_power_curves(power_results, alpha):**
-  Plots power curves for both unweighted and weighted tests using ggplot2, with a reference line for the significance level.
+2. **Install Dependencies**:
+   It is recommended to use a virtual environment.
 
-### 5. Main Workflow (`main_power_analysis.R`)
-- Sources all modules, sets up parameters, runs the power simulation, and generates plots. This script demonstrates the full workflow and can be adapted for custom analyses.
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## Documentation and Examples
+   *Dependencies include: `numpy`, `pandas`, `scipy`, `joblib`, `matplotlib`, `seaborn`.*
 
-- **Vignettes:**
-  - `vignettes/moments_and_statistics.qmd`: How to use the core moment/statistic functions.
-  - `vignettes/regularization_selection.qmd`: How to select optimal regularization for weighting matrices.
-  - `vignettes/power_simulation.qmd`: How to run and visualize power simulations.
+## Usage
 
-Each vignette provides setup, code examples, and interpretation.
+### 1. Running the Full Simulation (Command Line)
 
-## Style and Best Practices
-- All code uses snake_case for functions and variables (tidyverse standard).
-- Only native R pipe (`|>`) is used.
-- All functions are pipe-friendly and return tibbles or vectors.
-- Roxygen2 documentation is provided for all public functions.
+To run the complete Monte Carlo simulation as a background process or script:
 
-## Getting Started
-1. Source the relevant R scripts in your session or use as a package.
-2. See the vignettes in the `vignettes/` folder for usage examples and workflows.
-3. Run `main_power_analysis.R` for a full demonstration.
+```bash
+python main.py
+```
 
-## Requirements
-- R (>= 4.1.0)
-- Packages: `purrr`, `tibble`, `ggplot2`, `MASS`, `dplyr` (all tidyverse)
+This will:
 
-## License
-MIT
+* Initialize the simulation with default parameters (defined in `main.py`).
+* Run the analysis in parallel using all available CPU cores.
+* Save the results to `empirical_size_results.csv`.
+* Print progress and summary statistics to the console.
+
+You can modify `main.py` to adjust parameters like sample size (`n_data`), repetitions (`M`), or moment orders (`orders`).
+
+### 2. Interactive Analysis (Jupyter Notebook)
+
+For a step-by-step walkthrough and visualization of the system components:
+
+1. Open `demo_analysis.ipynb` in VS Code or Jupyter Lab.
+2. Run the cells sequentially.
+
+The notebook demonstrates:
+
+* **Data Generation**: Visualizing the hybrid distribution and verifying percentile placement.
+* **Estimation**: Recovering parameters from synthetic data.
+* **Testing**: Running the hypothesis tests and optimizing parameters ($\tau$ and $\beta$).
+* **Simulation**: Running a small-scale simulation directly in the notebook.
+
+## Key Features
+
+* **Hybrid Distribution**: Generates data with a LogNormal body and Pareto tail, ensuring the tail starts exactly at a specified percentile.
+* **Robust Estimation**: Uses a combination of MLE, Hill Estimator, and Method of Moments to robustly estimate tail parameters.
+* **Parallel Processing**: Uses `joblib` for efficient parallel execution of Monte Carlo simulations.
+* **Modular Design**: Follows SOLID principles, making it easy to extend or modify individual components (e.g., adding a new test statistic) without breaking the rest of the system.
