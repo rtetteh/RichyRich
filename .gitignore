@@ -489,3 +489,19 @@ Thumbs.db
 *.tdo
 *.thm
 *.xdy
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
