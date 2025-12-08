@@ -8,7 +8,7 @@ def main():
         M=10,
         S=200,
         R=299,
-        orders=[4, 8],
+        orders=[4],
         n_jobs=-1,
         verbose=True,
     )
