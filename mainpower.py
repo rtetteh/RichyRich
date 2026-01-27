@@ -5,10 +5,10 @@ def main():
 
     config = ExperimentConfig(
         n_data=2000,
-        M=10,
+        M=100,
         S=200,
         R=299,
-        orders=[4],
+        orders=[50],
         delta=0.05,
         n_jobs=-1,
         verbose=True,

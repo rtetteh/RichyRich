@@ -4,6 +4,8 @@ from .utils import nearest_positive_definite
 from .statistics import AuxiliaryStatistics
 from .distribution import HybridLogNormalPareto, HybridParams
 from .estimation import ParameterEstimator
+import scipy.linalg
+
 
 class HypothesisTest:
     
@@ -143,11 +145,11 @@ class HypothesisTest:
             ])
             
             # Compute kernel (ONCE)
-            kernel_train = HypothesisTest.compute_kernel(psi_r_train - psi_bar_s_train, train_size)
+            K_Train = HypothesisTest.compute_kernel(psi_s_train, S)
             
             # Pre-compute K_Train (ONCE)
-            integral_operator_train = (1 + 1/S) * kernel_train
-            K_Train = (1 + 1/S) * integral_operator_train
+            #integral_operator_train = (1 + 1/S) * kernel_train
+            #K_Train = (1 + 1/S) * integral_operator_train
             squared_integral_operator_train = np.dot(K_Train, K_Train)
             
             # Generate S simulated datasets for testing (ONCE)
@@ -169,40 +171,92 @@ class HypothesisTest:
             ])
             
             # Compute testing kernel (ONCE)
-            kernel_test = HypothesisTest.compute_kernel(psi_r_test - psi_bar_s_test, test_size)
-            integral_operator_test = (1 + 1/S) * kernel_test
-            K_T = (1 + 1/S) * integral_operator_test
-            squared_integral_operator_test = np.dot(K_T, K_T)
+            K_Test = HypothesisTest.compute_kernel(psi_s_test, S)
+            #K_Test = HypothesisTest.compute_kernel(psi_r_test - psi_bar_s_test, test_size)
+            #integral_operator_test = (1 + 1/S) * kernel_test
+            #K_Test = (1 + 1/S) * integral_operator_test
+            squared_integral_operator_test = np.dot(K_Test  , K_Test)
 
             # Loop over c_values (Now very fast)
             for c in c_values:
                 beta = c / (N ** (1/3))
-                
-                # Training Phase: Compute optimal weights
-                pinv_matrix_train = np.linalg.pinv(squared_integral_operator_train + beta * np.eye(moment_order))
-                optimal_weight_train = np.dot(pinv_matrix_train, K_Train)
-                optimal_weight_train = optimal_weight_train / np.abs(optimal_weight_train).max()
-                
-                eigenvalues_train = np.linalg.eigvals(optimal_weight_train)
-                if not np.all(eigenvalues_train > 0):
-                    optimal_weight_train = nearest_positive_definite(optimal_weight_train)
-                
-                # Testing Phase: Compute optimal weights for test set
-                pinv_matrix_test = np.linalg.pinv(squared_integral_operator_test + beta * np.eye(moment_order))
-                optimal_weight_test = np.dot(pinv_matrix_test, K_T)
-                optimal_weight_test = optimal_weight_test / np.abs(optimal_weight_test).max()
-                
-                eigenvalues_test = np.linalg.eigvals(optimal_weight_test)
-                if not np.all(eigenvalues_test > 0):
-                    optimal_weight_test = nearest_positive_definite(optimal_weight_test)
-                
-                norm_test = np.linalg.norm(optimal_weight_test @ z_test)
+
+                try:
+                    # Training Phase: Compute optimal weights with improved numerical stability
+                    matrix_train = squared_integral_operator_train + beta * np.eye(moment_order)
+
+                    # Check condition number and use SVD-based pseudoinverse for better stability
+                    cond_train = np.linalg.cond(matrix_train)
+                    if cond_train > 1e12:  # Very ill-conditioned
+                        # Use SVD-based pseudoinverse with regularization
+                        U, s, Vt = np.linalg.svd(matrix_train)
+                        s_reg = np.where(s > 1e-12, 1.0/s, 0.0)
+                        pinv_matrix_train = Vt.T @ np.diag(s_reg) @ U.T
+                    else:
+                        pinv_matrix_train = np.linalg.pinv(matrix_train)
+
+                    #optimal_weight_train = np.dot(pinv_matrix_train, K_Train)
+                    optimal_weight_train = np.dot(scipy.linalg.sqrtm(pinv_matrix_train), scipy.linalg.sqrtm(K_Train))
+
+                    # Improved normalization: L2 normalization instead of max abs
+                    # weight_norm = np.linalg.norm(optimal_weight_train)
+                    # if weight_norm > 1e-10:  # Avoid division by near-zero
+                    #     optimal_weight_train = optimal_weight_train / weight_norm
+
+                    # Check if weight matrix is positive definite, if not, regularize further
+                    eigenvalues_train = np.linalg.eigvals(optimal_weight_train)
+                    min_eigenvalue_train = np.min(eigenvalues_train)
+                    if min_eigenvalue_train <= 0:  # Relaxed check for cross-validation
+                        # Add minimum regularization to ensure positive definiteness
+                        regularization_term = abs(min_eigenvalue_train) + 1e-8
+                        optimal_weight_train += regularization_term * np.eye(moment_order)
+
+                    # Testing Phase: Compute optimal weights for test set with same improvements
+                    matrix_test = squared_integral_operator_test + beta * np.eye(moment_order)
+
+                    cond_test = np.linalg.cond(matrix_test)
+                    if cond_test > 1e12:
+                        U, s, Vt = np.linalg.svd(matrix_test)
+                        s_reg = np.where(s > 1e-12, 1.0/s, 0.0)
+                        pinv_matrix_test = Vt.T @ np.diag(s_reg) @ U.T
+                    else:
+                        pinv_matrix_test = np.linalg.pinv(matrix_test)
+
+                    #optimal_weight_test = np.dot(pinv_matrix_test, K_T)
+                    optimal_weight_test = np.dot(scipy.linalg.sqrtm(pinv_matrix_test), scipy.linalg.sqrtm(K_Test))
+                    
+
+                    # Same improved normalization
+                    # weight_norm_test = np.linalg.norm(optimal_weight_test)
+                    # if weight_norm_test > 1e-10:
+                    #     optimal_weight_test = optimal_weight_test / weight_norm_test
+
+                    eigenvalues_test = np.linalg.eigvals(optimal_weight_test)
+                    min_eigenvalue_test = np.min(eigenvalues_test)
+                    if min_eigenvalue_test <= 1e-12:  # Strict positive definiteness check
+                        # Add minimum regularization to ensure strict positive definiteness
+                        regularization_term = abs(min_eigenvalue_test) + 1e-12
+                        optimal_weight_test += regularization_term * np.eye(moment_order)
+                        # Verify the fix worked
+                        eigenvalues_after = np.linalg.eigvals(optimal_weight_test)
+                        assert np.all(eigenvalues_after > 0), f"Matrix still not PD after regularization: {eigenvalues_after}"
+
+                    norm_test = np.linalg.norm(optimal_weight_test @ z_test)
+
+                except (np.linalg.LinAlgError, ValueError) as e:
+                    # If numerical issues persist, skip this beta value
+                    print(f"Warning: Numerical issues with beta={beta:.6f}, skipping. Error: {e}")
+                    continue
+                except AssertionError as e:
+                    # If strict PD enforcement fails, skip this beta value
+                    print(f"Warning: Strict PD enforcement failed for beta={beta:.6f}, skipping. Error: {e}")
+                    continue
                 
                 if norm_test < min_norm_test:
                     min_norm_test = norm_test
                     best_beta = beta
             
-            return best_beta if best_beta is not None else c_values[0] / (N ** (1/3))
+            return best_beta if best_beta is not None else c_values[-1] / (N ** (1/3))  # Use smallest regularization if none work
 
         finally:
             np.random.set_state(saved_random_state)

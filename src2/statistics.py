@@ -10,6 +10,7 @@ class AuxiliaryStatistics:
         """Internal method to compute all statistics once."""
         # Base percentiles
         percentiles = np.percentile(data, [25, 50, 75, 90, 95])
+        #percentiles = np.percentile(data, [10, 20, 30, 40,50])
         q_ratios = [
             percentiles[2] / percentiles[0], 
             percentiles[3] / percentiles[1],
@@ -19,6 +20,7 @@ class AuxiliaryStatistics:
 
         # Additional percentile sets
         percentiles2 = np.percentile(data, [5,10,15,20,30,35,40,45,55,60,65,70,80,85])
+        #percentiles2 = np.percentile(data, [5,11,15,22,31,35,43,45,55,60,65,71,80,85])
         percentiles3 = np.percentile(data, [4,8,12,16,24,28,32,36,44,48,52,56,64,68,72])
         percentiles4 = np.percentile(data, [7,14,21,42,49,63,77,84,91,98])
         percentiles5 = np.percentile(data, [9,19,29,39,49,59,69,79,89,99])

@@ -125,7 +125,7 @@ def run_empirical_size_experiment(config: ExperimentConfig) -> EmpiricalSizeResu
     plt.figure(figsize=(10, 6))
     sns.histplot(true_data,kde=True,color = 'blue', alpha = 0.7)
     plt.axvline(x=config.tau_true, color='red', linestyle='--', label='True Tau')
-    plt.title('Distribution of True Data with True Tau')
+    plt.title('Distribution of True Data with True Tau (82nd Percentile)')
     plt.xlabel('Value')
     plt.ylabel('Frequency')
     plt.legend()

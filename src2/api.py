@@ -6,6 +6,7 @@ from typing import List, Optional
 import numpy as np
 import os
 import pandas as pd
+import scipy.linalg
 
 from .distribution import HybridLogNormalPareto, HybridParams, DeviatedHybridLogNormalPareto, DeviatedParams
 from .estimation import ParameterEstimator
@@ -27,7 +28,8 @@ class ExperimentConfig:
     alpha_true: float = 3.05
     tau_true: float = 32000.0
     tau_perc_true: float = 0.82
-    delta: float = 0.1  # fraction from log-Cauchy for power experiment
+    delta: float = 0.1  # fraction from misspecified Pareto for power experiment
+    taumis: float = 0.1  # tau deviation parameter (τ_d = τ × (1 + taumis))
     M: int = 10
     S: int = 200
     R: int = 299
@@ -123,13 +125,14 @@ def run_empirical_size_experiment(config: ExperimentConfig) -> EmpiricalSizeResu
     tau_grid = (
         config.tau_grid
         if config.tau_grid is not None
-        else np.arange(70, 91, 1)
+        else np.arange(70, 90, 1)
     )
     tau_values = np.percentile(true_data, tau_grid)
 
     if config.c_values is None:
         c_values = np.concatenate(
-            ([50, 40, 30, 20, 15, 10], np.logspace(1, -7, num=20))
+            #([50, 40, 30, 20, 15, 10], np.logspace(1, -7, num=20))
+            ([50, 40, 30, 20, 15, 10], np.logspace(1, -10, num=30))
         )
     else:
         c_values = config.c_values
@@ -212,10 +215,34 @@ def run_empirical_size_experiment(config: ExperimentConfig) -> EmpiricalSizeResu
 
             K_T = HypothesisTest.compute_kernel(psi_s_matrix, config.S)
             squared_integral_operator = np.dot(K_T, K_T)
-            pinv = np.linalg.pinv(
-                squared_integral_operator + best_beta * np.eye(order)
-            )
-            optimal_weight = np.dot(pinv, K_T)
+
+            # Improved numerical stability for optimal weight computation
+            matrix_opt = squared_integral_operator + best_beta * np.eye(order)
+
+            # Check condition number and use SVD-based approach if ill-conditioned
+            cond_opt = np.linalg.cond(matrix_opt)
+            if cond_opt > 1e12:  # Very ill-conditioned
+                # Use SVD-based pseudoinverse with regularization
+                U, s, Vt = np.linalg.svd(matrix_opt)
+                s_reg = np.where(s > 1e-12, 1.0/s, 0.0)
+                pinv = Vt.T @ np.diag(s_reg) @ U.T
+            else:
+                pinv = np.linalg.pinv(matrix_opt)
+            
+            #optimal_weight = np.dot(pinv, K_T)
+            optimal_weight = np.dot(scipy.linalg.sqrtm(pinv), scipy.linalg.sqrtm(K_T))
+
+            # # Improved normalization: L2 normalization instead of max abs
+            # weight_norm = np.linalg.norm(optimal_weight)
+            # if weight_norm > 1e-10:  # Avoid division by near-zero
+            #     optimal_weight = optimal_weight / weight_norm
+
+            # Ensure positive definiteness
+            from .utils import nearest_positive_definite
+            eigenvalues_opt = np.linalg.eigvals(optimal_weight)
+            min_eigenvalue = np.min(eigenvalues_opt)
+            if min_eigenvalue <= 1e-12:  # Strict positive definiteness check
+                optimal_weight = nearest_positive_definite(optimal_weight + 1e-8 * np.eye(order))
 
             W_N_1opt = HypothesisTest.calculate_test_statistic_1opt(
                 observed_psi, bar_psi, optimal_weight
@@ -238,8 +265,8 @@ def run_empirical_size_experiment(config: ExperimentConfig) -> EmpiricalSizeResu
                     )
                 )
 
-            p_val_1 = float(np.mean(np.array(stats_1) >= W_N_1))
-            p_val_1opt = float(np.mean(np.array(stats_1opt) >= W_N_1opt))
+            p_val_1 = float((np.sum(np.array(stats_1) >= W_N_1) + 1) / (config.R + 1))
+            p_val_1opt = float((np.sum(np.array(stats_1opt) >= W_N_1opt) + 1) / (config.R + 1))
 
             return p_val_1 < config.alpha, p_val_1opt < config.alpha
         # Optional warm-up: run a few repetitions sequentially to estimate
@@ -359,6 +386,7 @@ def run_empirical_power_experiment(config: ExperimentConfig) -> EmpiricalSizeRes
         tau=config.tau_true,
         tau_perc=config.tau_perc_true,
         delta=config.delta,
+        taumis=config.taumis,
     )
     true_data = DeviatedHybridLogNormalPareto.generate_sample(
         config.n_data, true_params, seed=config.seed
@@ -456,10 +484,33 @@ def run_empirical_power_experiment(config: ExperimentConfig) -> EmpiricalSizeRes
 
             K_T = HypothesisTest.compute_kernel(psi_s_matrix, config.S)
             squared_integral_operator = np.dot(K_T, K_T)
-            pinv = np.linalg.pinv(
-                squared_integral_operator + best_beta * np.eye(order)
-            )
-            optimal_weight = np.dot(pinv, K_T)
+
+            # Improved numerical stability for optimal weight computation
+            matrix_opt = squared_integral_operator + best_beta * np.eye(order)
+
+            # Check condition number and use SVD-based approach if ill-conditioned
+            cond_opt = np.linalg.cond(matrix_opt)
+            if cond_opt > 1e12:  # Very ill-conditioned
+                # Use SVD-based pseudoinverse with regularization
+                U, s, Vt = np.linalg.svd(matrix_opt)
+                s_reg = np.where(s > 1e-12, 1.0/s, 0.0)
+                pinv = Vt.T @ np.diag(s_reg) @ U.T
+            else:
+                pinv = np.linalg.pinv(matrix_opt)
+
+            optimal_weight = np.dot(scipy.linalg.sqrtm(pinv), scipy.linalg.sqrtm(K_T))
+
+            # # Improved normalization: L2 normalization instead of max abs
+            # weight_norm = np.linalg.norm(optimal_weight)
+            # if weight_norm > 1e-10:  # Avoid division by near-zero
+            #     optimal_weight = optimal_weight / weight_norm
+
+            # # Ensure positive definiteness
+            # from .utils import nearest_positive_definite
+            # eigenvalues_opt = np.linalg.eigvals(optimal_weight)
+            # min_eigenvalue = np.min(eigenvalues_opt)
+            # if min_eigenvalue <= 1e-12:  # Strict positive definiteness check
+            #     optimal_weight = nearest_positive_definite(optimal_weight + 1e-8 * np.eye(order))
 
             W_N_1opt = HypothesisTest.calculate_test_statistic_1opt(
                 observed_psi, bar_psi, optimal_weight
@@ -482,8 +533,11 @@ def run_empirical_power_experiment(config: ExperimentConfig) -> EmpiricalSizeRes
                     )
                 )
 
-            p_val_1 = float(np.mean(np.array(stats_1) >= W_N_1))
-            p_val_1opt = float(np.mean(np.array(stats_1opt) >= W_N_1opt))
+            p_val_1 = float((np.sum(np.array(stats_1) >= W_N_1) + 1) / (config.R + 1))
+            p_val_1opt = float((np.sum(np.array(stats_1opt) >= W_N_1opt) + 1) / (config.R + 1))
+
+            #p_val_1 = float(np.mean(np.array(stats_1) >= W_N_1))
+            #p_val_1opt = float(np.mean(np.array(stats_1opt) >= W_N_1opt))
 
             return p_val_1 < config.alpha, p_val_1opt < config.alpha
         # Optional warm-up: run a few repetitions sequentially to estimate

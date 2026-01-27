@@ -18,7 +18,8 @@ class DeviatedParams:
     alpha: float
     tau: float
     tau_perc: float = 0.82
-    delta: float = 0.1  # fraction of sample from log-Cauchy
+    delta: float = 0.05  # Contamination fraction (δ) - fraction of sample from misspecified Pareto
+    taumis: float = 0.05  # Tau deviation parameter (τ_d = τ × (1 + taumis))
 
 class HybridLogNormalPareto:
     """
@@ -101,41 +102,26 @@ class HybridLogNormalPareto:
 
 class DeviatedHybridLogNormalPareto:
     """
-    Deviated hybrid distribution: LogNormal body + (1-delta)*Pareto + delta*log-Cauchy tail.
+    Deviated hybrid distribution: LogNormal body + Pareto tail with tau deviation contamination.
+    Uses delta as contamination fraction (δ) where δ*n observations are randomly replaced
+    with Pareto draws using tau_d = tau * (1 + taumis) instead of the true tau.
     """
-    
-    @staticmethod
-    def generate_log_cauchy_sample(n: int, m: float, s: float, tau: float, seed: Optional[int] = None) -> np.ndarray:
-        """
-        Generate log-Cauchy sample > tau.
-        
-        Parameters m and s estimated from log of Pareto tail.
-        """
-        if seed is not None:
-            rng = np.random.RandomState(seed)
-        else:
-            rng = np.random
-        
-        # Generate Cauchy: m + s * tan(pi * (U - 0.5))
-        U = rng.rand(n)
-        cauchy_vals = m + s * np.tan(np.pi * (U - 0.5))
-        Y = np.exp(cauchy_vals)
-        # Ensure > tau
-        Y = np.maximum(Y, tau + 1e-4)
-        return Y
     
     @staticmethod
     def generate_sample(n: int, params: DeviatedParams, seed: Optional[int] = None) -> np.ndarray:
         """
-        Generate deviated hybrid sample.
+        Generate deviated hybrid sample with tau deviation contamination.
+        
+        A fraction δ (params.delta) of the sample is randomly selected and replaced
+        with Pareto draws using tau_d = tau * (1 + taumis) instead of the true tau.
         
         Args:
             n (int): Sample size.
             params (DeviatedParams): Distribution parameters.
-            seed (int, optional): Random seed.
+            seed (int, optional): Random seed for reproducibility.
             
         Returns:
-            np.ndarray: Generated data.
+            np.ndarray: Generated data with contamination.
         """
         if seed is not None:
             rng = np.random.RandomState(seed)
@@ -169,30 +155,54 @@ class DeviatedHybridLogNormalPareto:
         
         dat1 = np.array(dat1[:n1])
 
-        # Step 2: Generate full Pareto tail
-        k = 1.0 / params.alpha
-        sigma_pareto = params.tau / params.alpha
-        theta = params.tau
-        v2 = stats.genpareto.rvs(c=k, scale=sigma_pareto, loc=theta, size=n2, random_state=rng)
+        # Step 2: Generate Pareto tail >= tau
+        v2 = stats.genpareto.rvs(
+            c=1.0 / params.alpha,
+            loc=params.tau,
+            scale=params.tau / params.alpha,
+            size=n2,
+            random_state=rng
+        )
 
-        # Step 3: Generate deviations
-        d = int(np.floor(params.delta * n))
+        # Step 3: Apply tau deviation contamination to Pareto tail subsample
+        # Generate deviations from Pareto subsample - replace last d observations
+        d = int(np.floor(params.delta * n))  # number of misspecified observations
         if d > 0:
-            # Estimate log-Cauchy parameters from v2
-            log_v2 = np.log(v2)
-            m = np.median(log_v2)
-            s = np.median(np.abs(log_v2 - m))
+            tau_d = params.tau * (1.0 + params.taumis)  # misspecified tau parameter
             
-            # Generate log-Cauchy deviations
-            dev_v2 = DeviatedHybridLogNormalPareto.generate_log_cauchy_sample(d, m, s, params.tau, seed)
+            # Generate misspecified Pareto draws (size 2*d to ensure enough > tau)
+            devv2 = stats.genpareto.rvs(
+                c=1.0 / params.alpha,
+                loc=tau_d,
+                scale=tau_d / params.alpha,
+                size=2 * d,
+                random_state=rng
+            )
             
-            # Replace the last d observations in v2
-            v2 = np.concatenate([v2[:-d], dev_v2])
+            # Create v2dev: first (n2-d) from v2, last d from devv2 (only those > tau)
+            v2dev = np.zeros(n2)
+            v2dev[:n2 - d] = v2[:n2 - d]
+            
+            # Fill last d positions with valid devv2 values (> tau)
+            c1 = n2 - d  # Start index for replacement
+            i = 0  # Index in devv2
+            while c1 < n2 and i < len(devv2):
+                if devv2[i] > params.tau:
+                    v2dev[c1] = devv2[i]
+                    c1 += 1
+                i += 1
+            
+            # If we don't have enough valid values, fill remaining with the last valid value
+            while c1 < n2:
+                v2dev[c1] = devv2[i-1] if i > 0 else tau_d
+                c1 += 1
+        else:
+            v2dev = v2
 
-        # Step 3: Combine data
-        data = np.concatenate([dat1, v2])
+        # Step 4: Combine data
+        data = np.concatenate([dat1, v2dev])
         
-        # Step 4: FORCE exact percentile by strategic placement
+        # Step 5: FORCE exact percentile by strategic placement
         sorted_data = np.sort(data)
         
         percentile_position = params.tau_perc * (n - 1)
@@ -205,7 +215,7 @@ class DeviatedHybridLogNormalPareto:
             sorted_data[lower_index] = params.tau
             sorted_data[upper_index] = params.tau
         
-        # Step 5: Shuffle
+        # Step 6: Shuffle
         rng.shuffle(sorted_data)
         
         return sorted_data

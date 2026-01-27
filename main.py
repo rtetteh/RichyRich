@@ -1,14 +1,18 @@
-from src.api import ExperimentConfig, run_empirical_size_experiment
+from src2.api import ExperimentConfig, run_empirical_size_experiment
 
 def main():
     print("Starting Empirical Size Analysis...")
 
     config = ExperimentConfig(
         n_data=2000,
-        M=10,
+        M=1000,
         S=200,
         R=299,
-        orders=[4],
+        orders=[4,8],
+        delta=0.0,  # Size experiment: no contamination
+        taumis=0.0,  # No tau deviation for size
+        alpha=0.05,
+        seed=1234,  # Same seed as power_analysis.py
         n_jobs=-1,
         verbose=True,
     )
