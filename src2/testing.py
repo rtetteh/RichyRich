@@ -255,6 +255,8 @@ class HypothesisTest:
                 if norm_test < min_norm_test:
                     min_norm_test = norm_test
                     best_beta = beta
+                elif norm_test == min_norm_test and (best_beta is None or beta < best_beta):
+                    best_beta = beta
             
             return best_beta if best_beta is not None else c_values[-1] / (N ** (1/3))  # Use smallest regularization if none work
 

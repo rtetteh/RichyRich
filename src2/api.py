@@ -131,8 +131,8 @@ def run_empirical_size_experiment(config: ExperimentConfig) -> EmpiricalSizeResu
 
     if config.c_values is None:
         c_values = np.concatenate(
-            #([50, 40, 30, 20, 15, 10], np.logspace(1, -7, num=20))
-            ([50, 40, 30, 20, 15, 10], np.logspace(1, -10, num=30))
+            ([50, 40, 30, 20, 15, 10], np.logspace(1, -7, num=20))
+            #([50, 40, 30, 20, 15, 10], np.logspace(1, -10, num=30))
         )
     else:
         c_values = config.c_values

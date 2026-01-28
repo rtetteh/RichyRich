@@ -8,7 +8,7 @@ def main():
         M=1000,
         S=200,
         R=299,
-        orders=[4,8],
+        orders=[4,8,11,20,50,70,100,120],  # Testing multiple orders
         delta=0.0,  # Size experiment: no contamination
         taumis=0.0,  # No tau deviation for size
         alpha=0.05,
